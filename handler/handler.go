@@ -50,7 +50,8 @@ func UploadHandler(w http.ResponseWriter, r *http.Request) {
 
 		newFile.Seek(0, 0)
 		fileMeta.FileSha1 = util.FileSha1(newFile)
-		meta.UpdateFileMeta(fileMeta)
+		//meta.UpdateFileMeta(fileMeta)
+		_ = meta.UpdateFileMetaDB(fileMeta) // use mysql to store meta
 
 		http.Redirect(w, r, "/file/upload/suc", http.StatusFound)
 	}
@@ -67,8 +68,9 @@ func GetFileMetaHandler(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
 
 	filehash := r.Form["filehash"][0]
-	fMeta, ok := meta.GetFileMeta(filehash)
-	if ok == false {
+	//fMeta, ok := meta.GetFileMeta(filehash)
+	fMeta, err := meta.GetFileMetaDB(filehash)
+	if err != nil {
 		io.WriteString(w, "Don't find this file")
 		return
 	}
@@ -85,7 +87,14 @@ func FileQueryHandler(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
 
 	limitCnt, _ := strconv.Atoi(r.Form.Get("limit"))
-	fileMetas := meta.GetLastFileMetas(limitCnt)
+	//fileMetas := meta.GetLastFileMetas(limitCnt)
+
+	fileMetas, err := meta.GetLastFileMetasDB(limitCnt)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
 	data, err := json.Marshal(fileMetas)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -97,8 +106,8 @@ func FileQueryHandler(w http.ResponseWriter, r *http.Request) {
 func DownloadHandler(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
 	filesha1 := r.Form.Get("filehash")
-	fm, ok := meta.GetFileMeta(filesha1)
-	if ok == false {
+	fm, err := meta.GetFileMetaDB(filesha1)
+	if err != nil {
 		io.WriteString(w, "Don't find this file")
 		return
 	}
@@ -121,7 +130,69 @@ func DownloadHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(data)
 }
 
-// FileMetaUpdateHandler ： 更新元信息接口(重命名)
+//FileMetaUpdateHandler: update the filename in mysql
+func FileMetaUpdateHandler(w http.ResponseWriter, r *http.Request) {
+	r.ParseForm()
+
+	opType := r.Form.Get("op")
+	fileSha1 := r.Form.Get("filehash")
+	newFileName := r.Form.Get("filename")
+
+	if opType != "0" {
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
+	if r.Method != "POST" {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Get file meta accord to filehash
+	curFileMeta, err := meta.GetFileMetaDB(fileSha1)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	// update fileName
+	curFileMeta.FileName = newFileName
+	suc := meta.UpdateFileMetaDB(curFileMeta)
+	if !suc {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	data, err := json.Marshal(curFileMeta)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	w.Write(data)
+
+}
+
+func FileDeleteHandler(w http.ResponseWriter, r *http.Request) {
+	r.ParseForm()
+	filesha1 := r.Form.Get("filehash")
+
+	fmeta, err := meta.GetFileMetaDB(filesha1)
+	if err != nil {
+		io.WriteString(w, "Don't find this file")
+		return
+	}
+
+	os.Remove(fmeta.Location)
+
+	ok := meta.OnFileRemovedDB(filesha1)
+	if ok != true {
+		io.WriteString(w, "Have some errors")
+		return
+	}
+}
+
+/*
+// FileMetaUpdateHandler ： process in memory
 func FileMetaUpdateHandler(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
 
@@ -155,7 +226,9 @@ func FileMetaUpdateHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(data)
 }
 
-// FileDeleteHandler : 删除文件及元信息
+
+
+// FileDeleteHandler : process in memory
 func FileDeleteHandler(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
 	fileSha1 := r.Form.Get("filehash")
@@ -172,3 +245,4 @@ func FileDeleteHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 }
+*/
