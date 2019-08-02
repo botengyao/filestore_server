@@ -5,7 +5,7 @@ import (
 	"sort"
 )
 
-// FileMeta : 文件元信息结构
+// FileMeta : file meta struct
 type FileMeta struct {
 	FileSha1 string
 	FileName string
