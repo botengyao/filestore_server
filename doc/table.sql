@@ -27,6 +27,21 @@ CREATE TABLE `tbl_user` (
   `profile` text COMMENT 'user properties',
   `status` int(11) NOT NULL DEFAULT '0' COMMENT '账户状态(启用/禁用/锁定/标记删除等)',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `idx_phone` (`phone`),
+  UNIQUE KEY `idx_name` (`user_name`),
   KEY `idx_status` (`status`)
 ) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE `tbl_user_file` (
+  `id` int(11) NOT NULL PRIMARY KEY AUTO_INCREMENT,
+  `user_name` varchar(64) NOT NULL,
+  `file_sha1` varchar(64) NOT NULL DEFAULT '' ,
+  `file_size` bigint(20) DEFAULT '0' ,
+  `file_name` varchar(256) NOT NULL DEFAULT '' ,
+  `upload_at` datetime DEFAULT CURRENT_TIMESTAMP ,
+  `last_update` datetime DEFAULT CURRENT_TIMESTAMP 
+          ON UPDATE CURRENT_TIMESTAMP ,
+  `status` int(11) NOT NULL DEFAULT '0' COMMENT '文件状态(0正常1已删除2禁用)',
+  UNIQUE KEY `idx_user_file` (`user_name`, `file_sha1`),
+  KEY `idx_status` (`status`),
+  KEY `idx_user_id` (`user_name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

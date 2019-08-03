@@ -89,13 +89,16 @@
 
   function updateFileList() {
     $.ajax({
-      url: "/file/query?" + queryParams(),
+      //url: "/file/query?" + queryParams(),
+      url:"/file/query",
       type: "POST",
       data: {
-        limit: 15
+        "username":localStorage.getItem('username'), 
+        "token": localStorage.getItem('token'),
+        "limit": 15
       },
       error: function (err) {
-          alert(err);
+         alert(err);
       },
       success: function (body) {
         if (!body) {
@@ -129,6 +132,7 @@
 
   function toUploadFile() {
     window.location.href = '/file/upload?' + queryParams();
+    //window.location.href = '/file/upload'
   }
 
 </script>

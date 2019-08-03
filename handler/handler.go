@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	dblayer "filestore_server/db"
 	"filestore_server/meta"
 	"filestore_server/util"
 	"fmt"
@@ -22,6 +23,9 @@ func UploadHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		io.WriteString(w, string(data))
+
+		//if r.Method == http.MethodGet {
+		//	http.Redirect(w, r, "/static/view/index.html", http.StatusFound) //!!!!!!!!无法识别POST
 	} else if r.Method == "POST" {
 		file, head, err := r.FormFile("file")
 		if err != nil {
@@ -48,12 +52,24 @@ func UploadHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		//Can put the function that caculates filehash into microservice.
 		newFile.Seek(0, 0)
 		fileMeta.FileSha1 = util.FileSha1(newFile)
 		//meta.UpdateFileMeta(fileMeta)
 		_ = meta.UpdateFileMetaDB(fileMeta) // use mysql to store meta
 
-		http.Redirect(w, r, "/file/upload/suc", http.StatusFound)
+		//Todo: Update user's file table --ch5
+		r.ParseForm()
+		username := r.Form.Get("username")
+		suc := dblayer.OnUserFileUploadFinished(username, fileMeta.FileSha1,
+			fileMeta.FileName, fileMeta.FileSize)
+		if suc {
+			http.Redirect(w, r, "/static/view/home.html", http.StatusFound)
+		} else {
+			w.Write([]byte("Upload Failed"))
+		}
+
+		//http.Redirect(w, r, "/file/upload/suc", http.StatusFound)
 	}
 
 }
@@ -88,14 +104,16 @@ func FileQueryHandler(w http.ResponseWriter, r *http.Request) {
 
 	limitCnt, _ := strconv.Atoi(r.Form.Get("limit"))
 	//fileMetas := meta.GetLastFileMetas(limitCnt)
-
-	fileMetas, err := meta.GetLastFileMetasDB(limitCnt)
+	username := r.Form.Get("username")
+	//fileMetas, err := meta.GetLastFileMetasDB(limitCnt)
+	userFiles, err := dblayer.QueryUserFileMetas(username, limitCnt)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	data, err := json.Marshal(fileMetas)
+	//data, err := json.Marshal(fileMetas)
+	data, err := json.Marshal(userFiles)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
