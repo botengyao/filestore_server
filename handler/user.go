@@ -143,7 +143,7 @@ func IsTokenValid(token string, username string) bool {
 	// 5 mins logout
 	timeOld, _ := strconv.ParseInt("0x"+token[32:], 0, 64)
 	timeNow := time.Now().Unix()
-	if timeDiff := timeNow - timeOld; timeDiff > 300 {
+	if timeDiff := timeNow - timeOld; timeDiff > 3000 { //50mins for test
 		return false
 	}
 	// Compare with the token in mysql
