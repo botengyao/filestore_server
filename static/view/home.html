@@ -53,6 +53,7 @@
                     <th>文件大小</th>
                     <th>上传时间</th>
                     <th>最近更新</th>
+                    <th>操作</th>
                   </tr>
                 </thead>
               </table>
@@ -86,11 +87,9 @@
       }
     });
   }
-
   function updateFileList() {
     $.ajax({
-      //url: "/file/query?" + queryParams(),
-      url:"/file/query",
+      url: "/file/query",
       type: "POST",
       data: {
         "username":localStorage.getItem('username'), 
@@ -98,7 +97,7 @@
         "limit": 15
       },
       error: function (err) {
-         alert(err);
+          alert(err);
       },
       success: function (body) {
         if (!body) {
@@ -108,6 +107,15 @@
         if (!data || data.length <= 0) {
           return;
         }
+
+        var downloadHtml = '<button class="btn btn-success" ' +
+          'style="height:30px;margin:5px 0;"' +
+          'onClick = "downloadFile(\''+'http://127.0.0.1:8080'+'/file/' +
+          'downloadurl?filehash={0}&{1}\')">下载</button>';
+        var renameFileHtml = '<button class="btn btn-success" ' +
+          'style="height:30px;margin:5px 3px;"' +
+          'onClick = "renameFile(\'{0}\',\'{1}\',\''+'http://127.0.0.1:8080'+'/file/' +
+          'update?op=0&filehash={2}&{3}\')">重命名</button>';
 
         for (var i = 0; i < data.length; i++) {
           var x = document.getElementById('filetbl').insertRow();
@@ -125,6 +133,11 @@
 
           cell = x.insertCell();
           cell.innerHTML = data[i].LastUpdated;
+
+          cell = x.insertCell();
+          cell.innerHTML = downloadHtml.format(data[i].FileHash, queryParams()) +
+            renameFileHtml.format(data[i].FileHash, data[i].FileName, data[i].FileHash,
+              queryParams());
         }
       }
     });
@@ -132,9 +145,59 @@
 
   function toUploadFile() {
     window.location.href = '/file/upload?' + queryParams();
-    //window.location.href = '/file/upload'
   }
 
+  function downloadFile(durl) {
+    $.ajax({
+      url: durl,
+      type: "POST",
+      error: function (jqXHR, textStatus, errorThrown) {
+        if (textStatus == "error") {
+          alert(textStatus + " : " + errorThrown);
+        } else {
+          alert(textStatus);
+        }
+      },
+      success: function (body, textStatus, jqXHR) {
+        try {
+          alert("文件即将下载自: " + body);
+          var elemIF = document.createElement("iframe");
+          elemIF.src = body;
+          elemIF.style.display = "none";
+          document.body.appendChild(elemIF);
+        } catch (e) {
+          alert(e);
+        }
+      }
+    });
+  }
+
+  function renameFile(filehash, filename, renameUrl) {
+    var newFileName = prompt("\n当前文件名: {0}\n\n请输入新的文件名: ".format(filename));
+    newFileName = newFileName.trim();
+
+    if (newFileName.length <= 0) {
+      alert("文件名不能为空");
+      return;
+    }
+
+    if (newFileName.indexOf(" ") >= 0) {
+      alert("文件名不能包含空格");
+      return;
+    }
+
+    $.ajax({
+      url: renameUrl + "&filename=" + newFileName,
+      type: "POST",
+      error: function (msg) {
+        alert(msg);
+      },
+      success: function (body) {
+        alert("文件名修改成功");
+        window.location.href = '/static/view/home.html';
+      }
+    });
+  }
 </script>
 
 </html>

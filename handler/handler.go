@@ -2,8 +2,12 @@ package handler
 
 import (
 	"encoding/json"
+	cmn "filestore_server/common"
+	cfg "filestore_server/config"
 	dblayer "filestore_server/db"
 	"filestore_server/meta"
+	"filestore_server/store/ceph"
+	"filestore_server/store/oss"
 	"filestore_server/util"
 	"fmt"
 	"io"
@@ -11,6 +15,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -36,7 +41,7 @@ func UploadHandler(w http.ResponseWriter, r *http.Request) {
 
 		fileMeta := meta.FileMeta{
 			FileName: head.Filename,
-			Location: "/Users/boteng/Documents/golang/upload_file/" + head.Filename,
+			Location: cfg.TempLocalRootDir + head.Filename,
 			UploadAt: time.Now().Format("2006-01-02 15:04:05"),
 		}
 
@@ -55,6 +60,35 @@ func UploadHandler(w http.ResponseWriter, r *http.Request) {
 		//Can put the function that caculates filehash into microservice.
 		newFile.Seek(0, 0)
 		fileMeta.FileSha1 = util.FileSha1(newFile)
+
+		// 5. 同步或异步将文件转移到Ceph/OSS
+		newFile.Seek(0, 0) // 游标重新回到文件头部
+		if cfg.CurrentStoreType == cmn.StoreCeph {
+			// 文件写入Ceph存储
+			data, _ := ioutil.ReadAll(newFile)
+			cephPath := "/ceph/" + fileMeta.FileSha1
+			_ = ceph.PutObject("userfile", cephPath, data)
+			fileMeta.Location = cephPath
+		} else if cfg.CurrentStoreType == cmn.StoreOSS {
+			// 文件写入OSS存储
+			ossPath := "oss/" + fileMeta.FileSha1
+			err = oss.Bucket().PutObject(ossPath, newFile)
+			//options := []oss.Option{
+			//oss.ContentDisposition("attachment;filename=\""+fileName+"\""),
+			//}
+			// 原来用的是bucket.PutObject(ossPath, file), 现在通过第三个参数指定相关option配置
+			//bucket.PutObject(ossPath, file, options...)
+			if err != nil {
+				fmt.Println(err.Error())
+				w.Write([]byte("Upload failed!"))
+				return
+			}
+			fileMeta.Location = ossPath
+		}
+
+		fmt.Println(fileMeta.Location)
+		// TODO: 处理异常情况，比如跳转到一个上传失败页面
+
 		//meta.UpdateFileMeta(fileMeta)
 		_ = meta.UpdateFileMetaDB(fileMeta) // use mysql to store meta
 
@@ -254,6 +288,27 @@ func TryFastUploadHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Write(resp.JSONBytes())
 	return
+}
+
+//Download file link from OSS/ceph/localstore
+func DownloadURLHandler(w http.ResponseWriter, r *http.Request) {
+	filehash := r.Form.Get("filehash")
+	// 从文件表查找记录
+	row, _ := dblayer.GetFileMeta(filehash)
+
+	// TODO: 判断文件存在OSS，还是Ceph，还是在本地
+	if strings.HasPrefix(row.FileAddr.String, "/Users") ||
+		strings.HasPrefix(row.FileAddr.String, "/ceph") {
+		username := r.Form.Get("username")
+		token := r.Form.Get("token")
+		tmpURL := fmt.Sprintf("http://%s/file/download?filehash=%s&username=%s&token=%s",
+			r.Host, filehash, username, token)
+		w.Write([]byte(tmpURL))
+	} else if strings.HasPrefix(row.FileAddr.String, "oss/") {
+		// oss下载url
+		signedURL := oss.DownloadURL(row.FileAddr.String)
+		w.Write([]byte(signedURL))
+	}
 }
 
 /*
